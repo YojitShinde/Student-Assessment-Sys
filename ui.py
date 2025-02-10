@@ -8,6 +8,9 @@ from peer_comparison import compare_files
 from plagiarism_check import check_plagiarism
 from ai_content import detect_ai_content
 from ocr import perform_ocr, save_ocr_result
+# from sentence_transformers import SentenceTransformer, util
+# import re
+from ans_eval import evaluate_answers
 
 class StudentAssessmentApp:
     def __init__(self, root):
@@ -217,7 +220,8 @@ class StudentAssessmentApp:
             filetypes=(("Text Files", "*.txt"), ("PDF Files", "*.pdf"), ("All Files", "*.*"))
         )
         if file_path:
-            self.submission_label.config(text=file_path.split('/')[-1])
+            self.submission_file = file_path  # Store the full path
+            self.submission_label.config(text=os.path.basename(file_path))
             messagebox.showinfo("Success", "Answer file uploaded successfully!")
 
     def upload_answer_key(self):
@@ -225,7 +229,8 @@ class StudentAssessmentApp:
             filetypes=(("Text Files", "*.txt"), ("PDF Files", "*.pdf"), ("All Files", "*.*"))
         )
         if file_path:
-            self.answer_key_label.config(text=file_path.split('/')[-1])
+            self.answer_key_file = file_path  # Store the full path
+            self.answer_key_label.config(text=os.path.basename(file_path))
             messagebox.showinfo("Success", "Answer key uploaded successfully!")
 
     # Existing methods from previous implementation
@@ -279,12 +284,27 @@ class StudentAssessmentApp:
 
 
     def evaluate_submission(self):
-        report = "Evaluation Report:\n" + "="*20 + "\n\n"
-        report += "Placeholder evaluation content\n"
-        
-        self.report_text.delete(1.0, tk.END)
-        self.report_text.insert(tk.END, report)
-        messagebox.showinfo("Success", "Evaluation completed successfully!")
+        # Check if files are uploaded
+        if not self.submission_file or not self.answer_key_file:
+            messagebox.showerror("Error", "Both the student answer and the answer key must be uploaded!")
+            return
+
+        # Call the evaluation function with the stored file paths
+        result = evaluate_answers(self.submission_file, self.answer_key_file)
+
+        # Display the results
+        if result["status"] == "success":
+            report = "Evaluation Report:\n" + "="*20 + "\n\n"
+            report += f"Overall Score: {result['overall_score']:.2f}%\n\n"
+            report += "Detailed Analysis:\n" + "-"*20 + "\n"
+            report += "\n".join(result["details"])
+            
+            self.report_text.delete(1.0, tk.END)
+            self.report_text.insert(tk.END, report)
+            messagebox.showinfo("Success", "Evaluation completed successfully!")
+        else:
+            messagebox.showerror("Error", f"Evaluation failed: {result['message']}")
+
 
     def clear_log_screen(self):
         self.log_area.delete(1.0, tk.END)
