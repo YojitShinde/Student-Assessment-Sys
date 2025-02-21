@@ -11,6 +11,11 @@ from ocr import perform_ocr, save_ocr_result
 # from sentence_transformers import SentenceTransformer, util
 # import re
 from ans_eval import evaluate_answers
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from datetime import datetime
 
 class StudentAssessmentApp:
     def __init__(self, root):
@@ -23,7 +28,7 @@ class StudentAssessmentApp:
         
         # Store uploaded file paths
         self.assignment_file_paths = []
-        self.submission_file = ""
+        self.submission_files = []
         self.answer_key_file = ""
         self.format_key_file = ""
         
@@ -80,22 +85,7 @@ class StudentAssessmentApp:
             style='Accent.TButton'
         ).pack(side='left', padx=5)
 
-        # Clear buttons
-        ttk.Button(
-            upload_frame,
-            text="Reset",
-            command=self.clear_log_screen,
-            style='Accent.TButton'
-        ).pack(side='right', padx=5)
-        
-        ttk.Button(
-            upload_frame,
-            text="Clear Log",
-            command=self.erase_log,
-            style='Accent.TButton'
-        ).pack(side='right', padx=5)
-
-        # Checkbox frame
+        # Checkbox frame for verification options
         checkbox_frame = ttk.LabelFrame(self.assignment_tab, text="Verification Options", padding=10)
         checkbox_frame.pack(fill='x', padx=20, pady=10)
 
@@ -122,13 +112,39 @@ class StudentAssessmentApp:
             variable=self.ai_var
         ).pack(side='left', padx=10)
 
-        # Generate report button
+        # Button frame for all buttons
+        button_frame = ttk.Frame(self.assignment_tab)
+        button_frame.pack(fill='x', padx=20, pady=10)
+
+        # Generate and Download buttons (left side)
         ttk.Button(
-            self.assignment_tab,
+            button_frame,
             text="Generate Report",
             command=self.generate_assignment_report,
             style='Accent.TButton'
-        ).pack(pady=10)
+        ).pack(side='left', padx=5)
+
+        ttk.Button(
+            button_frame,
+            text="Download Report",
+            command=self.download_assignment_report,
+            style='Accent.TButton'
+        ).pack(side='left', padx=5)
+
+        # Clear Log and Reset buttons (right side)
+        ttk.Button(
+            button_frame,
+            text="Reset",
+            command=self.clear_log_screen,
+            style='Accent.TButton'
+        ).pack(side='right', padx=5)
+
+        ttk.Button(
+            button_frame,
+            text="Clear Log",
+            command=self.erase_log,
+            style='Accent.TButton'
+        ).pack(side='right', padx=5)
 
         # Log area
         log_frame = ttk.LabelFrame(self.assignment_tab, text="Processing Log", padding=20)
@@ -146,21 +162,41 @@ class StudentAssessmentApp:
         self.log_area.pack(fill='both', expand=True)
 
     def setup_answer_tab(self):
+        # OCR frame
+        ocr_frame = ttk.LabelFrame(self.answer_tab, text="OCR Conversion", padding=20)
+        ocr_frame.pack(fill='x', padx=20, pady=10)
+
+        # File upload button
+        ttk.Button(
+            ocr_frame,
+            text="Upload Answer Files",
+            command=self.upload_answer_files,
+            style='Accent.TButton'
+        ).pack(side='left', padx=5)
+
+        # OCR button
+        ttk.Button(
+            ocr_frame,
+            text="Convert to Text (OCR)",
+            command=self.convert_answers_ocr,
+            style='Accent.TButton'
+        ).pack(side='left', padx=5)
+
         # Frame for file uploads
         upload_frame = ttk.LabelFrame(self.answer_tab, text="Upload Files", padding=20)
         upload_frame.pack(fill='x', padx=20, pady=10)
 
-        # Submission upload section
+        # Student Answers upload section
         submission_frame = ttk.Frame(upload_frame)
         submission_frame.pack(fill='x', pady=5)
         
-        ttk.Label(submission_frame, text="Student Answer:", font=self.label_font).pack(side='left')
-        self.submission_label = ttk.Label(submission_frame, text="No file selected", font=self.text_font)
+        ttk.Label(submission_frame, text="Student Answers:", font=self.label_font).pack(side='left')
+        self.submission_label = ttk.Label(submission_frame, text="No files selected", font=self.text_font)
         self.submission_label.pack(side='left', padx=10)
         ttk.Button(
             submission_frame,
-            text="Choose File",
-            command=self.upload_submission,
+            text="Choose Files",
+            command=self.upload_submissions,
             style='Accent.TButton'
         ).pack(side='right')
 
@@ -178,13 +214,66 @@ class StudentAssessmentApp:
             style='Accent.TButton'
         ).pack(side='right')
 
-        # Evaluate button
+        # Checkbox frame for verification options
+        checkbox_frame = ttk.LabelFrame(self.answer_tab, text="Verification Options", padding=10)
+        checkbox_frame.pack(fill='x', padx=20, pady=10)
+
+        # Checkboxes for answer verification
+        self.answer_peer_var = BooleanVar()
+        self.answer_plag_var = BooleanVar()
+        self.answer_ai_var = BooleanVar()
+
+        ttk.Checkbutton(
+            checkbox_frame,
+            text="Compare Peer-to-Peer",
+            variable=self.answer_peer_var
+        ).pack(side='left', padx=10)
+
+        ttk.Checkbutton(
+            checkbox_frame,
+            text="Plagiarism Check",
+            variable=self.answer_plag_var
+        ).pack(side='left', padx=10)
+
+        ttk.Checkbutton(
+            checkbox_frame,
+            text="Detect AI-Generated Content",
+            variable=self.answer_ai_var
+        ).pack(side='left', padx=10)
+
+        # Button frame
+        button_frame = ttk.Frame(self.answer_tab)
+        button_frame.pack(fill='x', padx=20, pady=10)
+
+        # Evaluate and Download buttons (left side)
         ttk.Button(
-            self.answer_tab,
-            text="Evaluate Answer",
+            button_frame,
+            text="Evaluate Answers",
             command=self.evaluate_submission,
             style='Accent.TButton'
-        ).pack(pady=20)
+        ).pack(side='left', padx=5)
+
+        ttk.Button(
+            button_frame,
+            text="Download Report",
+            command=self.download_answer_report,
+            style='Accent.TButton'
+        ).pack(side='left', padx=5)
+
+        # Reset and Clear Log buttons (right side)
+        ttk.Button(
+            button_frame,
+            text="Reset",
+            command=self.reset_answer_tab,
+            style='Accent.TButton'
+        ).pack(side='right', padx=5)
+
+        ttk.Button(
+            button_frame,
+            text="Clear Log",
+            command=self.clear_answer_log,
+            style='Accent.TButton'
+        ).pack(side='right', padx=5)
 
         # Report section
         report_frame = ttk.LabelFrame(self.answer_tab, text="Evaluation Report", padding=20)
@@ -215,23 +304,24 @@ class StudentAssessmentApp:
         if not self.assignment_file_paths:
             self.log_area.insert(tk.END, "No files were selected.\n")
 
-    def upload_submission(self):
-        file_path = filedialog.askopenfilename(
+    def upload_submissions(self):
+        """Handle multiple student answer uploads"""
+        file_paths = filedialog.askopenfilenames(
+            title="Select Student Answer Files",
             filetypes=(("Text Files", "*.txt"), ("PDF Files", "*.pdf"), ("All Files", "*.*"))
         )
-        if file_path:
-            self.submission_file = file_path  # Store the full path
-            self.submission_label.config(text=os.path.basename(file_path))
-            messagebox.showinfo("Success", "Answer file uploaded successfully!")
+        if file_paths:
+            self.submission_files = list(file_paths)  # Store all paths
+            num_files = len(file_paths)
+            self.submission_label.config(text=f"{num_files} file{'s' if num_files > 1 else ''} selected")
 
     def upload_answer_key(self):
         file_path = filedialog.askopenfilename(
             filetypes=(("Text Files", "*.txt"), ("PDF Files", "*.pdf"), ("All Files", "*.*"))
         )
         if file_path:
-            self.answer_key_file = file_path  # Store the full path
+            self.answer_key_file = file_path
             self.answer_key_label.config(text=os.path.basename(file_path))
-            messagebox.showinfo("Success", "Answer key uploaded successfully!")
 
     # Existing methods from previous implementation
     def generate_assignment_report(self):
@@ -284,27 +374,55 @@ class StudentAssessmentApp:
 
 
     def evaluate_submission(self):
-        # Check if files are uploaded
-        if not self.submission_file or not self.answer_key_file:
-            messagebox.showerror("Error", "Both the student answer and the answer key must be uploaded!")
+        """Evaluate all student answers against the answer key"""
+        if not self.submission_files or not self.answer_key_file:
+            messagebox.showerror("Error", "Please upload both student answers and answer key!")
             return
 
-        # Call the evaluation function with the stored file paths
-        result = evaluate_answers(self.submission_file, self.answer_key_file)
+        self.report_text.delete(1.0, tk.END)
+        self.report_text.insert(tk.END, "Evaluation Results:\n" + "="*50 + "\n\n")
 
-        # Display the results
-        if result["status"] == "success":
-            report = "Evaluation Report:\n" + "="*20 + "\n\n"
-            report += f"Overall Score: {result['overall_score']:.2f}%\n\n"
-            report += "Detailed Analysis:\n" + "-"*20 + "\n"
-            report += "\n".join(result["details"])
+        # Basic answer evaluation
+        for student_file in self.submission_files:
+            result = evaluate_answers(student_file, self.answer_key_file)
             
-            self.report_text.delete(1.0, tk.END)
-            self.report_text.insert(tk.END, report)
-            messagebox.showinfo("Success", "Evaluation completed successfully!")
-        else:
-            messagebox.showerror("Error", f"Evaluation failed: {result['message']}")
+            filename = os.path.basename(student_file)
+            if result["status"] == "success":
+                self.report_text.insert(tk.END, f"File: {filename}\n")
+                self.report_text.insert(tk.END, f"Score: {result['overall_score']:.1f}%\n")
+                self.report_text.insert(tk.END, "-"*50 + "\n\n")
+            else:
+                self.report_text.insert(tk.END, f"Error evaluating {filename}: {result['message']}\n\n")
 
+        # Additional verifications
+        if self.answer_peer_var.get():
+            if len(self.submission_files) < 2:
+                self.report_text.insert(tk.END, "\nError: At least two files needed for peer comparison.\n")
+            else:
+                results = compare_files(self.submission_files)
+                self.report_text.insert(tk.END, "\n=== Peer-to-Peer Comparison ===\n")
+                for files, similarity in results.items():
+                    file1, file2 = files
+                    self.report_text.insert(tk.END, 
+                        f"{os.path.basename(file1)} vs {os.path.basename(file2)}: {similarity*100:.1f}%\n")
+
+        if self.answer_plag_var.get():
+            self.report_text.insert(tk.END, "\n=== Plagiarism Check ===\n")
+            for file in self.submission_files:
+                result = check_plagiarism([file])
+                self.report_text.insert(tk.END, f"\n{os.path.basename(file)}:\n{result[file]}\n")
+
+        if self.answer_ai_var.get():
+            self.report_text.insert(tk.END, "\n=== AI Content Detection ===\n")
+            for file in self.submission_files:
+                result = detect_ai_content([file])
+                filename = os.path.basename(file)
+                if result[file]['status'] == 'success':
+                    self.report_text.insert(tk.END, 
+                        f"\n{filename}:\nAI Content: {result[file]['ai_percentage']}%\n")
+                else:
+                    self.report_text.insert(tk.END, 
+                        f"\n{filename}: Error - {result[file]['error_message']}\n")
 
     def clear_log_screen(self):
         self.log_area.delete(1.0, tk.END)
@@ -324,6 +442,10 @@ class StudentAssessmentApp:
         self.log_area.insert(tk.END, "\nStarting OCR conversion...\n")
         
         for file_path in self.assignment_file_paths:
+            if not file_path.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+                self.log_area.insert(tk.END, f"Skipping {os.path.basename(file_path)}: Not an image file\n")
+                continue
+            
             filename = os.path.basename(file_path)
             self.log_area.insert(tk.END, f"\nProcessing: {filename}\n")
             
@@ -333,13 +455,159 @@ class StudentAssessmentApp:
                 self.log_area.insert(tk.END, f"Error processing {filename}: {error}\n")
                 continue
             
-            output_path = os.path.splitext(file_path)[0] + "_ocr.txt"
-            if save_ocr_result(text, output_path):
-                self.log_area.insert(tk.END, f"OCR result saved to: {os.path.basename(output_path)}\n")
+            if text:
+                output_path = os.path.splitext(file_path)[0] + "_ocr.txt"
+                if save_ocr_result(text, output_path):
+                    self.log_area.insert(tk.END, f"OCR result saved to: {os.path.basename(output_path)}\n")
+                else:
+                    self.log_area.insert(tk.END, f"Error saving OCR result for {filename}\n")
             else:
-                self.log_area.insert(tk.END, f"Error saving OCR result for {filename}\n")
+                self.log_area.insert(tk.END, f"No text extracted from {filename}\n")
         
         self.log_area.insert(tk.END, "\nOCR conversion completed!\n")
+
+    def clear_answer_log(self):
+        """Clear the answer evaluation log"""
+        self.report_text.delete(1.0, tk.END)
+        self.report_text.insert(tk.END, "Log cleared...\n")
+
+    def reset_answer_tab(self):
+        """Reset the answer verification tab"""
+        self.report_text.delete(1.0, tk.END)
+        self.submission_files = []
+        self.answer_key_file = ""
+        self.answer_files_for_ocr = []  # Clear OCR files
+        self.submission_label.config(text="No files selected")
+        self.answer_key_label.config(text="No file selected")
+        self.answer_peer_var.set(False)
+        self.answer_plag_var.set(False)
+        self.answer_ai_var.set(False)
+        self.report_text.insert(tk.END, "Answer verification resetted...\n")
+
+    def generate_pdf_report(self, content, module_name):
+        """Generate PDF report from content"""
+        try:
+            # Create downloads directory if it doesn't exist
+            downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+            
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{module_name}_report_{timestamp}.pdf"
+            filepath = os.path.join(downloads_dir, filename)
+            
+            # Create PDF document
+            doc = SimpleDocTemplate(filepath, pagesize=letter)
+            styles = getSampleStyleSheet()
+            
+            # Create custom style for content
+            content_style = ParagraphStyle(
+                'CustomStyle',
+                parent=styles['Normal'],
+                fontSize=10,
+                leading=14,
+                spaceAfter=10
+            )
+            
+            # Create elements list
+            elements = []
+            
+            # Add title
+            title = Paragraph(f"Student Assessment Report - {module_name}", styles['Title'])
+            elements.append(title)
+            elements.append(Spacer(1, 20))
+            
+            # Add timestamp
+            date_text = Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal'])
+            elements.append(date_text)
+            elements.append(Spacer(1, 20))
+            
+            # Add content
+            for line in content.split('\n'):
+                if line.strip():
+                    p = Paragraph(line, content_style)
+                    elements.append(p)
+                    elements.append(Spacer(1, 5))
+            
+            # Build PDF
+            doc.build(elements)
+            
+            return filepath
+            
+        except Exception as e:
+            return None
+
+    def download_answer_report(self):
+        """Download Answer Verification report"""
+        content = self.report_text.get(1.0, tk.END)
+        if content.strip():
+            filepath = self.generate_pdf_report(content, "Answer_Verification")
+            if filepath:
+                messagebox.showinfo("Success", f"Report downloaded to:\n{filepath}")
+            else:
+                messagebox.showerror("Error", "Failed to generate report")
+        else:
+            messagebox.showwarning("Warning", "No content to download")
+
+    def download_assignment_report(self):
+        """Download Assignment Verification report"""
+        content = self.log_area.get(1.0, tk.END)
+        if content.strip():
+            filepath = self.generate_pdf_report(content, "Assignment_Verification")
+            if filepath:
+                messagebox.showinfo("Success", f"Report downloaded to:\n{filepath}")
+            else:
+                messagebox.showerror("Error", "Failed to generate report")
+        else:
+            messagebox.showwarning("Warning", "No content to download")
+
+    def upload_answer_files(self):
+        """Upload files for OCR conversion"""
+        file_paths = filedialog.askopenfilenames(
+            title="Select Answer Files for OCR", 
+            filetypes=[
+                ("Image files", "*.jpg;*.jpeg;*.png;*.bmp"),
+                ("PDF files", "*.pdf"),
+                ("All files", "*.*")
+            ]
+        )
+
+        if file_paths:
+            self.answer_files_for_ocr = list(file_paths)
+            num_files = len(file_paths)
+            self.report_text.insert(tk.END, f"Uploaded {num_files} file(s) for OCR conversion\n")
+
+    def convert_answers_ocr(self):
+        """Convert uploaded answer files to text using OCR"""
+        if not hasattr(self, 'answer_files_for_ocr') or not self.answer_files_for_ocr:
+            messagebox.showerror("Error", "Please upload files for OCR conversion first!")
+            return
+        
+        self.report_text.insert(tk.END, "\nStarting OCR conversion...\n")
+        
+        for file_path in self.answer_files_for_ocr:
+            if not file_path.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.pdf')):
+                self.report_text.insert(tk.END, f"Skipping {os.path.basename(file_path)}: Unsupported file format\n")
+                continue
+            
+            filename = os.path.basename(file_path)
+            self.report_text.insert(tk.END, f"\nProcessing: {filename}\n")
+            
+            text, error = perform_ocr(file_path, lambda msg: self.report_text.insert(tk.END, msg))
+            
+            if error:
+                self.report_text.insert(tk.END, f"Error processing {filename}: {error}\n")
+                continue
+            
+            if text:
+                output_path = os.path.splitext(file_path)[0] + "_ocr.txt"
+                if save_ocr_result(text, output_path):
+                    self.report_text.insert(tk.END, f"OCR result saved to: {os.path.basename(output_path)}\n")
+                else:
+                    self.report_text.insert(tk.END, f"Error saving OCR result for {filename}\n")
+            else:
+                self.report_text.insert(tk.END, f"No text extracted from {filename}\n")
+        
+        self.report_text.insert(tk.END, "\nOCR conversion completed!\n")
 
 # Configure style
 def configure_styles():
